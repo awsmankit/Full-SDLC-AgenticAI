@@ -1,0 +1,18 @@
+[project]
+name = "multiagent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.128.4",
+    "langchain-core>=1.2.9",
+    "langchain-ollama>=1.0.1",
+    "langgraph>=1.0.8",
+    "langgraph-checkpoint-sqlite>=3.0.3",
+    "pydantic>=2.12.5",
+    "rich>=14.3.2",
+    "uvicorn>=0.40.0",
+    "websockets>=16.0",
+    "orjson>=3.10.0",
+]
