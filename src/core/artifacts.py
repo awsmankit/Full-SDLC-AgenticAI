@@ -39,7 +39,7 @@ def save_artifact(content: str, filename: str, category: str = "requirements", r
     Returns:
         Path to the saved file
     """
-    ensure_directories()
+    # ensure_directories() # Removed to prevent empty folders
     
     # Base directory
     base_dir = ARTIFACTS_DIR
@@ -47,17 +47,19 @@ def save_artifact(content: str, filename: str, category: str = "requirements", r
     
     if run_id:
         base_dir = ARTIFACTS_DIR / run_id
-        base_dir.mkdir(parents=True, exist_ok=True)
+        # We don't create base_dir yet, we wait until we write a file
         manifest_file = base_dir / "artifacts_manifest.json"
     
+    # Define category mapping but don't create them yet
     category_dirs = {
-        "requirements": base_dir / "requirements",
-        "testing": base_dir / "testing",
-        "bugs": base_dir / "bugs",
+        "requirements": "requirements",
+        "testing": "testing",
+        "bugs": "bugs",
     }
     
-    directory = category_dirs.get(category, base_dir / "requirements")
-    directory.mkdir(parents=True, exist_ok=True) # Ensure subdir exists
+    sub_dir_name = category_dirs.get(category, "requirements")
+    directory = base_dir / sub_dir_name
+    directory.mkdir(parents=True, exist_ok=True) # Ensure subdir exists ONLY when writing
     filepath = directory / filename
     
     # Add timestamp header

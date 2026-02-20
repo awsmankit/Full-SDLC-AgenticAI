@@ -20,7 +20,7 @@ class AutomationQAAgent(BaseAgent):
         
     @property
     def allowed_inputs(self) -> list[str]:
-        return ["test_plan", "task_assignments"]
+        return ["test_plan"]
     
     @property
     def allowed_outputs(self) -> list[str]:
@@ -32,6 +32,5 @@ class AutomationQAAgent(BaseAgent):
 
     def _build_user_prompt(self, input_data: dict[str, Any]) -> str:
         test_plan = input_data.get("test_plan", "")
-        task_assignments = input_data.get("task_assignments", "")
         template = load_prompt("automation_qa_user")
-        return template.replace("{test_plan}", test_plan).replace("{task_assignments}", task_assignments)
+        return template.replace("{test_plan}", test_plan)

@@ -137,10 +137,10 @@ def automation_qa_node(state: AgentState, config: RunnableConfig) -> Dict[str, A
         # Save automation_tests content
         if "automation_tests" in output.artifacts:
              test_content = output.artifacts["automation_tests"]
-             # Use ARTIFACTS_DIR / run_id / tests
+             # Use ARTIFACTS_DIR / run_id / testing
              from ..core.config import ARTIFACTS_DIR
              run_id = state.get("run_id", "default_run")
-             test_dir = ARTIFACTS_DIR / run_id / "tests"
+             test_dir = ARTIFACTS_DIR / run_id / "testing"
              test_dir.mkdir(parents=True, exist_ok=True)
              
              file_path = test_dir / "test_app.py"
@@ -202,4 +202,91 @@ def reviewer_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     _emit(config, WorkflowEventType.AGENT_START, {"agent": agent_id, "role": "Code Reviewer"})
 
     output = reviewer_agent.invoke({"srs": state["srs"], "code": state["code"]}, on_token=_get_on_token(config, agent_id, state.get("run_id", "default")))
-    return _handle_agent_output(state, config, output, agent_id)
+    
+    updates = _handle_agent_output(state, config, output, agent_id)
+    
+    # Increment review count
+    current_count = state.get("review_count", 0)
+    updates["review_count"] = current_count + 1
+    
+    return updates
+
+def executor_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """Node for executing generated code and tests."""
+    import subprocess
+    import os
+    import sys
+    
+    _check_stopped(state)
+    agent_id = "Executor"
+    _emit(config, WorkflowEventType.PHASE_START, {"phase": "Code Execution", "agent": agent_id})
+    _emit(config, WorkflowEventType.AGENT_START, {"agent": agent_id, "role": "Test Executor"})
+    
+    from ..core.config import ARTIFACTS_DIR
+    run_id = state.get("run_id", "default_run")
+    src_dir = ARTIFACTS_DIR / run_id / "src"
+    
+    updates = {}
+    current_count = state.get("dev_retries", 0)
+    updates["dev_retries"] = current_count + 1
+
+    if not src_dir.exists():
+        updates["tests_passed"] = False
+        updates["test_results"] = "Execution Failed: Source directory does not exist."
+        _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": False, "message": updates["test_results"]})
+        return updates
+
+    venv_dir = src_dir / ".venv"
+    pip_cmd = str(venv_dir / "bin" / "pip")
+    pytest_cmd = str(venv_dir / "bin" / "pytest")
+    
+    # Wait for windows compatibility if needed
+    if os.name == 'nt':
+        pip_cmd = str(venv_dir / "Scripts" / "pip.exe")
+        pytest_cmd = str(venv_dir / "Scripts" / "pytest.exe")
+
+    try:
+        # Create virtual environment if it doesn't exist
+        if not venv_dir.exists():
+            _emit(config, WorkflowEventType.THOUGHT_CHUNK, {"agent": agent_id, "chunk": "Creating virtual environment...\n"})
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], cwd=src_dir, check=True, capture_output=True)
+
+        # Install dependencies
+        req_file = src_dir / "requirements.txt"
+        if req_file.exists():
+            _emit(config, WorkflowEventType.THOUGHT_CHUNK, {"agent": agent_id, "chunk": "Installing dependencies...\n"})
+            # Install pytest as well just to be safe
+            subprocess.run([pip_cmd, "install", "pytest", "fastapi", "httpx"], cwd=src_dir, capture_output=True)
+            install_res = subprocess.run([pip_cmd, "install", "-r", "requirements.txt"], cwd=src_dir, capture_output=True, text=True)
+            if install_res.returncode != 0:
+                updates["tests_passed"] = False
+                updates["test_results"] = f"Dependency Installation Failed:\n{install_res.stderr}\n{install_res.stdout}"
+                _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": False, "message": "Failed to install dependencies"})
+                return updates
+
+        # Run pytest
+        _emit(config, WorkflowEventType.THOUGHT_CHUNK, {"agent": agent_id, "chunk": "Running pytest...\n"})
+        test_res = subprocess.run([pytest_cmd, ".", "-v"], cwd=src_dir, capture_output=True, text=True, timeout=60)
+        
+        if test_res.returncode == 0:
+            updates["tests_passed"] = True
+            updates["test_results"] = test_res.stdout
+            _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": True, "message": "All tests passed!"})
+        else:
+            updates["tests_passed"] = False
+            # Truncate to avoid massive context
+            stdout_trunc = test_res.stdout[-2000:] if len(test_res.stdout) > 2000 else test_res.stdout
+            stderr_trunc = test_res.stderr[-2000:] if len(test_res.stderr) > 2000 else test_res.stderr
+            updates["test_results"] = f"Tests Failed:\nSTDOUT:\n{stdout_trunc}\n\nSTDERR:\n{stderr_trunc}"
+            _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": False, "message": "Tests failed."})
+
+    except subprocess.TimeoutExpired as e:
+        updates["tests_passed"] = False
+        updates["test_results"] = f"Execution Timeout: Tests took longer than 60 seconds to run."
+        _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": False, "message": "Execution Timeout."})
+    except Exception as e:
+        updates["tests_passed"] = False
+        updates["test_results"] = f"Execution Error: {str(e)}"
+        _emit(config, WorkflowEventType.AGENT_COMPLETE, {"agent": agent_id, "success": False, "message": f"Execution Error: {str(e)}"})
+
+    return updates

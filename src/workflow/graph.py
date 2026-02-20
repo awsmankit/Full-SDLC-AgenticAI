@@ -3,6 +3,7 @@ from .state import AgentState
 from .nodes import (
     product_manager_node, 
     developer_node,
+    executor_node,
     reviewer_node,
     test_manager_node, 
     test_lead_node, 
@@ -20,6 +21,7 @@ def create_qa_graph(checkpointer=None, interrupt_before=None):
     # Add Nodes
     workflow.add_node("ProductManager", product_manager_node)
     workflow.add_node("Developer", developer_node)
+    workflow.add_node("Executor", executor_node)
     workflow.add_node("Reviewer", reviewer_node)
     workflow.add_node("TestManager", test_manager_node)
     workflow.add_node("TestLead", test_lead_node)
@@ -45,13 +47,43 @@ def create_qa_graph(checkpointer=None, interrupt_before=None):
         }
     )
     workflow.add_edge("ProductManager", "Developer")
-    workflow.add_edge("Developer", "Reviewer")
+    workflow.add_edge("Developer", "Executor")
+    
+    # Conditional Edge for Execution Loop
+    def route_execution(state: AgentState):
+        """Route based on execution success or max dev retries."""
+        if state.get("tests_passed"):
+            return "Reviewer"
+            
+        count = state.get("dev_retries", 0)
+        if count >= 3:
+            print(f"WARNING: Max dev execution retries ({count}) reached. Proceeding to Reviewer despite failing tests.")
+            return "Reviewer"
+            
+        return "Developer"
+
+    workflow.add_conditional_edges(
+        "Executor",
+        route_execution,
+        {
+            "Reviewer": "Reviewer",
+            "Developer": "Developer"
+        }
+    )
     
     # Conditional Edge for Review
     def route_review(state: AgentState):
-        """Route based on review approval."""
+        """Route based on review approval or max retries."""
+        # If approved, proceed
         if state.get("review_approved"):
             return "TestManager"
+            
+        # If not approved, check retries
+        count = state.get("review_count", 0)
+        if count >= 3:
+            print(f"WARNING: Max review retries ({count}) reached. Proceeding despite rejection.")
+            return "TestManager"
+            
         return "Developer"
 
     workflow.add_conditional_edges(

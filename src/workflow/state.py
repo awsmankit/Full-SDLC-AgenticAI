@@ -14,11 +14,16 @@ class AgentState(TypedDict):
     srs: Optional[str]
     test_strategy: Optional[str]
     step: Optional[str]
+    test_plan: Optional[str]
     automation_tests: Optional[str]
     manual_tests: Optional[str]
     code: Optional[str]
     review: Optional[str]
     review_approved: Optional[bool]
+    review_count: int = 0
+    test_results: Optional[str] = None
+    tests_passed: Optional[bool] = None
+    dev_retries: int = 0
     
     # Execution Control
     app_name: str

@@ -118,7 +118,6 @@ def main():
         "test_strategy": None,
         "step": None,
         "test_plan": None,
-        "task_assignments": None,
         "automation_tests": None,
         "manual_tests": None,
         "code": None,

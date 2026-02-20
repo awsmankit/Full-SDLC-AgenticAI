@@ -32,7 +32,7 @@ class DeveloperAgent(BaseAgent):
         
     @property
     def allowed_inputs(self) -> list[str]:
-        return ["srs", "review"]
+        return ["srs", "review", "test_results"]
     
     @property
     def allowed_outputs(self) -> list[str]:
@@ -45,11 +45,16 @@ class DeveloperAgent(BaseAgent):
     def _build_user_prompt(self, input_data: dict[str, Any]) -> str:
         srs = input_data.get("srs", "")
         review = input_data.get("review", "")
+        test_results = input_data.get("test_results", "")
         
         template = load_prompt("dev_user")
         
         if review:
             # Add review feedback to the prompt
             template += f"\n\nPrevious Review Feedback:\n{review}\n\nPlease fix the issues and provide updated code."
+            
+        if test_results:
+            # Add test feedback to the prompt
+            template += f"\n\nTEST EXECUTION FAILED:\n{test_results}\n\nPlease analyze the test failures, fix the bugs in your code, and provide the fully updated code files."
             
         return template.replace("{srs}", srs)

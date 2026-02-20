@@ -24,8 +24,8 @@ BUGS_DIR = ARTIFACTS_DIR / "bugs"
 # Ensure directories exist
 def ensure_directories():
     """Create all necessary directories."""
-    for directory in [ARTIFACTS_DIR, REQUIREMENTS_DIR, TESTING_DIR, BUGS_DIR, SCHEMAS_DIR, PROMPTS_DIR]:
-        directory.mkdir(parents=True, exist_ok=True)
+    # Only create the root artifacts directory, subdirs are created on demand
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Agent Configuration

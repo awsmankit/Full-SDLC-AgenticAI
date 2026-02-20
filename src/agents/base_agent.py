@@ -162,8 +162,19 @@ class BaseAgent(ABC):
                 fixed_lines.append(line + "\\n")
             else:
                 fixed_lines.append(line)
+                
+        joined_json = "\n".join(fixed_lines)
         
-        return "\n".join(fixed_lines)
+        # 3. Aggressive missing key extraction for 'approved' (often buried inside the 'review' string)
+        # Matches literal: Approved: false" \n }
+        # And converts to: Approved: false", \n "approved": false \n }
+        extracted_json = re.sub(
+            r'([Aa]pproved:\s*(true|false|True|False))\s*"\s*\}', 
+            lambda m: f'{m.group(1)}",\n  "approved": {m.group(2).lower()}\n}}', 
+            joined_json
+        )
+        
+        return extracted_json
 
     def _parse_response(self, response: str) -> AgentOutput:
         """Parse LLM response into structured output."""
@@ -198,7 +209,27 @@ class BaseAgent(ABC):
                                 pass
                             return AgentOutput(success=False, errors=[f"JSON Parsing Error: {str(je)}"])
                     
-                    try:
+                        # Pre-validation fix: LLMs sometimes omit 'approved' or output it as string
+                        if isinstance(parsed_data, dict):
+                            # Try to fix string booleans
+                            for k, v in list(parsed_data.items()):
+                                if isinstance(v, str):
+                                    if v.lower() == "true":
+                                        parsed_data[k] = True
+                                    elif v.lower() == "false":
+                                        parsed_data[k] = False
+                                        
+                            # Try to infer 'approved' if missing
+                            if "review" in parsed_data and "approved" not in parsed_data:
+                                review_text = parsed_data["review"].lower()
+                                if "approved: false" in review_text or "not approved" in review_text or "not yet approved" in review_text:
+                                    parsed_data["approved"] = False
+                                elif "approved: true" in review_text or "is approved" in review_text:
+                                    parsed_data["approved"] = True
+                                else:
+                                     # Default fallback to False to be safe
+                                     parsed_data["approved"] = False
+
                         # Validate with Pydantic
                         data = self.output_schema.model_validate(parsed_data)
                         
